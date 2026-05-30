@@ -1,6 +1,6 @@
 import { achievementDefinitions, baseDogs, botTeams, packs, questDefinitions, rarityMeta, rarityOrder } from './data.js';
 import { icon } from './icons.js';
-import { botPower, isBotLocked, ownedDogs, questProgress, selectedBot, selectedTeamDogs, synergyInfo, teamLineup, teamPower } from './game.js';
+import { arenaEffect, botPower, isBotLocked, ownedDogs, questProgress, selectedBot, selectedTeamDogs, synergyInfo, teamLineup, teamPower } from './game.js';
 
 function statLine(iconName, label, value) {
   return `<div class="stat-line">${icon(iconName)}<span>${label}</span><strong>${value}</strong></div>`;
@@ -18,6 +18,8 @@ export function collectionScene(state) {
           <span>${dog.rarity}</span>
         </div>
         <div class="level-row">Уровень ${dog.level || '???'} <small>копии: ${dog.copies}</small></div>
+        <p class="style-tag">${locked ? 'Силуэт в питомнике' : dog.style}</p>
+        <p class="lore-text">${locked ? 'Открой карту, чтобы узнать характер бойца и его роль в стае.' : dog.lore}</p>
         <p class="ability-text">${locked ? 'Карта не изучена: найди её в паке.' : dog.ability}</p>
         ${statLine('zap', 'Атака', dog.power)}
         ${statLine('heart', 'Здоровье', dog.hp)}
@@ -29,10 +31,18 @@ export function collectionScene(state) {
 }
 
 export function shopScene(state) {
-  return `<section class="shop-layout">
+  return `<section class="shop-intro">
+    <div>
+      <p class="eyebrow">${icon('shop')} Питомник редкостей</p>
+      <h2>Открывай боксы как мини-событие</h2>
+      <p>Каждый пак подсвечивает добычу, пополняет коллекцию и даёт копии для будущих прокачек.</p>
+    </div>
+    <span>🎁</span>
+  </section>
+  <section class="shop-layout">
     <div class="pack-list">
       ${packs.map((pack) => `<article class="pack-card">
-        <div class="pack-icon">📦</div>
+        <div class="pack-icon">📦</div><div class="pack-spark"></div>
         <h2>${pack.title}</h2>
         <p>${pack.description}</p>
         <strong>${pack.cards} карт · ${pack.price} очков</strong>
@@ -55,6 +65,7 @@ export function battleScene(state) {
   const selectedIds = selectedTeamDogs(state).map((dog) => dog.id);
   const synergy = synergyInfo(selectedTeamDogs(state));
   const battle = state.manualBattle;
+  const arena = arenaEffect(bot);
   return `<section class="battle-layout">
     <div class="bot-list">
       ${botTeams.map((enemy, index) => `<button class="${index === state.selectedBotIndex ? 'active ' : ''}bot-button" data-bot="${index}" ${isBotLocked(state, enemy) ? 'aria-disabled="true"' : ''}>
@@ -67,10 +78,18 @@ export function battleScene(state) {
         <span>VS</span>
         <div><p>${bot.name}</p><strong>${Math.round(botPower(state))}</strong></div>
       </div>
+      <div class="arena-stage">
+        <div>
+          <strong>🏟️ ${arena.name}</strong>
+          <p>${arena.description}</p>
+        </div>
+        <span>${arena.mood}</span>
+      </div>
       <div class="synergy-card">
         <strong>${icon('combo')} Комбо стаи</strong>
         <p>${synergy.bonuses.join(' · ')}</p>
       </div>
+      ${battleBoardMarkup(state)}
       <div class="manual-team-panel">
         <h3>${icon('paw')} Твоя тройка</h3>
         <div class="team-picker">
@@ -95,6 +114,19 @@ export function battleScene(state) {
 }
 
 
+function hpBar(fighter) {
+  const hp = Math.max(0, fighter.currentHp);
+  const percent = Math.max(0, Math.min(100, (hp / fighter.maxHp) * 100));
+  return `<div class="hp-bar" aria-label="${fighter.name}: ${hp} из ${fighter.maxHp} HP"><span style="width: ${percent}%"></span></div>`;
+}
+
+function battleBoardMarkup(state) {
+  const battle = state.manualBattle;
+  if (!battle?.active) return '';
+  const row = (title, team) => `<div class="battle-row"><strong>${title}</strong>${team.map((fighter) => `<div class="mini-fighter ${fighter.alive ? '' : 'down'}"><span>${fighter.emoji}</span><div><b>${fighter.name}</b>${hpBar(fighter)}<small>${Math.max(0, fighter.currentHp)}/${fighter.maxHp} HP · щит ${fighter.shield} · фокус ${fighter.focus}</small></div></div>`).join('')}</div>`;
+  return `<div class="battle-board">${row('Твоя стая', battle.playerTeam)}${row('Соперники', battle.enemyTeam)}</div>`;
+}
+
 function manualBattleControls(state) {
   const battle = state.manualBattle;
   if (!battle?.active) return `<button class="fight-button" data-start-battle="true">${icon('swords')} Начать ручной бой</button>`;
@@ -108,6 +140,7 @@ function manualBattleControls(state) {
       return `<article class="fighter-action ${!fighter.alive ? 'down' : ''}">
         <strong>${fighter.emoji} ${fighter.name}</strong>
         <span>${Math.max(0, fighter.currentHp)}/${fighter.maxHp} HP · щит ${fighter.shield}</span>
+        ${hpBar(fighter)}
         <div>
           <button data-manual-action="basic" data-fighter="${fighter.id}" ${disabled ? 'disabled' : ''}>Атака</button>
           <button data-manual-action="super" data-fighter="${fighter.id}" ${disabled || usedSuper ? 'disabled' : ''}>Супер</button>

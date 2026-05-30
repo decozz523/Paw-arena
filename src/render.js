@@ -7,8 +7,13 @@ export function renderApp(state) {
     <section class="hero-card">
       <div>
         <p class="eyebrow">${icon('sparkles')} Paw Arena</p>
-        <h1>Собери стаю, закрывай миссии и проходи лигу ботов</h1>
-        <p class="hero-text">Бой стал пошаговым: HP, инициатива, щиты, метки, криты, лечение и роли собак теперь влияют на результат.</p>
+        <h1>Собери стаю и зажги неоновую арену лап</h1>
+        <p class="hero-text">У каждой собаки появился характер, боевой стиль и арена с модификаторами: HP, инициатива, щиты, метки, криты, лечение и роли теперь читаются прямо в интерфейсе.</p>
+        <div class="hero-badges">
+          <span>✨ анимированные карты</span>
+          <span>🏟️ арены с эффектами</span>
+          <span>❤️ живые HP-бары</span>
+        </div>
       </div>
       <div class="stats-panel">
         <span>${icon('coins')} ${state.points} очков</span>
