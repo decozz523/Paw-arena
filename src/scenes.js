@@ -1,6 +1,6 @@
 import { achievementDefinitions, baseDogs, botTeams, packs, questDefinitions, rarityMeta, rarityOrder } from './data.js';
 import { icon } from './icons.js';
-import { botPower, isBotLocked, ownedDogs, questProgress, selectedBot, selectedTeamDogs, synergyInfo, teamLineup, teamPower } from './game.js';
+import { arenaEffect, botPower, isBotLocked, ownedDogs, questProgress, selectedBot, selectedTeamDogs, synergyInfo, teamLineup, teamPower } from './game.js';
 
 function statLine(iconName, label, value) {
   return `<div class="stat-line">${icon(iconName)}<span>${label}</span><strong>${value}</strong></div>`;
@@ -18,6 +18,8 @@ export function collectionScene(state) {
           <span>${dog.rarity}</span>
         </div>
         <div class="level-row">Уровень ${dog.level || '???'} <small>копии: ${dog.copies}</small></div>
+        <p class="style-tag">${locked ? 'Силуэт в питомнике' : dog.style}</p>
+        <p class="lore-text">${locked ? 'Открой карту, чтобы узнать характер бойца и его роль в стае.' : dog.lore}</p>
         <p class="ability-text">${locked ? 'Карта не изучена: найди её в паке.' : dog.ability}</p>
         ${statLine('zap', 'Атака', dog.power)}
         ${statLine('heart', 'Здоровье', dog.hp)}
@@ -29,10 +31,18 @@ export function collectionScene(state) {
 }
 
 export function shopScene(state) {
-  return `<section class="shop-layout">
+  return `<section class="shop-intro">
+    <div>
+      <p class="eyebrow">${icon('shop')} Питомник редкостей</p>
+      <h2>Открывай боксы как мини-событие</h2>
+      <p>Каждый пак подсвечивает добычу, пополняет коллекцию и даёт копии для будущих прокачек.</p>
+    </div>
+    <span>🎁</span>
+  </section>
+  <section class="shop-layout">
     <div class="pack-list">
       ${packs.map((pack) => `<article class="pack-card">
-        <div class="pack-icon">📦</div>
+        <div class="pack-icon">📦</div><div class="pack-spark"></div>
         <h2>${pack.title}</h2>
         <p>${pack.description}</p>
         <strong>${pack.cards} карт · ${pack.price} очков</strong>
@@ -55,6 +65,7 @@ export function battleScene(state) {
   const selectedIds = selectedTeamDogs(state).map((dog) => dog.id);
   const synergy = synergyInfo(selectedTeamDogs(state));
   const battle = state.manualBattle;
+  const arena = arenaEffect(bot);
   return `<section class="battle-layout">
     <div class="bot-list">
       ${botTeams.map((enemy, index) => `<button class="${index === state.selectedBotIndex ? 'active ' : ''}bot-button" data-bot="${index}" ${isBotLocked(state, enemy) ? 'aria-disabled="true"' : ''}>
@@ -67,24 +78,18 @@ export function battleScene(state) {
         <span>VS</span>
         <div><p>${bot.name}</p><strong>${Math.round(botPower(state))}</strong></div>
       </div>
+      <div class="arena-stage">
+        <div>
+          <strong>🏟️ ${arena.name}</strong>
+          <p>${arena.description}</p>
+        </div>
+        <span>${arena.mood}</span>
+      </div>
       <div class="synergy-card">
         <strong>${icon('combo')} Комбо стаи</strong>
         <p>${synergy.bonuses.join(' · ')}</p>
       </div>
-      <div class="manual-team-panel">
-        <h3>${icon('paw')} Твоя тройка</h3>
-        <div class="team-picker">
-          ${ownedDogs(state).map((dog) => `<button class="team-chip ${selectedIds.includes(dog.id) ? 'active' : ''}" data-team-dog="${dog.id}" ${battle?.active ? 'disabled' : ''}>${dog.emoji} ${dog.name}</button>`).join('')}
-        </div>
-        <small>Нажми на собаку, чтобы поставить её в тройку. Новая собака заменит самую старую выбранную.</small>
-      </div>
-      <div class="enemy-team">
-        ${bot.dogs.map((id) => {
-          const dog = baseDogs.find((item) => item.id === id);
-          return `<span>${dog.emoji} ${dog.name}</span>`;
-        }).join('')}
-      </div>
-      ${manualBattleControls(state)}
+      ${battle?.active ? activeArenaMarkup(state) : battleSetupMarkup(state, selectedIds, bot)}
       ${battleSummaryMarkup(state)}
       <div class="battle-report">
         <h3>${icon('scroll')} Ход боя</h3>
@@ -95,25 +100,109 @@ export function battleScene(state) {
 }
 
 
-function manualBattleControls(state) {
+function hpBar(fighter) {
+  const hp = Math.max(0, fighter.currentHp);
+  const percent = Math.max(0, Math.min(100, (hp / fighter.maxHp) * 100));
+  return `<div class="hp-bar" aria-label="${fighter.name}: ${hp} из ${fighter.maxHp} HP"><span style="width: ${percent}%"></span></div>`;
+}
+
+function statusBadges(fighter) {
+  const statuses = [];
+  if (fighter.shield > 0) statuses.push(`🛡 ${fighter.shield}`);
+  if (fighter.focus > 0) statuses.push(`🎯 ${fighter.focus}`);
+  if (fighter.slowed > 0) statuses.push('❄ замедлен');
+  if (fighter.marked > 0) statuses.push('📍 метка');
+  if (fighter.stunned > 0) statuses.push('⛔ блок');
+  return statuses.length ? `<small>${statuses.join(' · ')}</small>` : '<small>готов к обмену ударами</small>';
+}
+
+function battleSetupMarkup(state, selectedIds, bot) {
+  return `<div class="manual-team-panel setup-panel">
+    <h3>${icon('paw')} Собери тройку перед выходом на поле</h3>
+    <div class="team-picker">
+      ${ownedDogs(state).map((dog) => `<button class="team-chip ${selectedIds.includes(dog.id) ? 'active' : ''}" data-team-dog="${dog.id}">${dog.emoji} ${dog.name}</button>`).join('')}
+    </div>
+    <small>Нажми на собаку, чтобы поставить её в тройку. Новая собака заменит самую старую выбранную.</small>
+    <div class="enemy-team">
+      ${bot.dogs.map((id) => {
+        const dog = baseDogs.find((item) => item.id === id);
+        return `<span>${dog.emoji} ${dog.name}</span>`;
+      }).join('')}
+    </div>
+    <button class="fight-button" data-start-battle="true">${icon('swords')} Выйти на арену</button>
+  </div>`;
+}
+
+function actionHint(battle, fighter) {
+  if (!battle?.active) return 'Выбери бойца';
+  if (battle.turn !== 'player') return 'Бот отвечает — держим оборону';
+  if (!fighter) return 'Нажми на свою карту снизу';
+  if (!fighter.alive) return `${fighter.name} выбыл из боя`;
+  if (battle.actedIds.includes(fighter.id)) return `${fighter.name} уже ходил в этом раунде`;
+  if (fighter.stunned > 0) return `${fighter.name} заблокирован способностью соперника: действие пропустится`;
+  return `Выбран ${fighter.name}: атака доступна${battle.usedSupers.includes(fighter.id) ? ', супер уже потрачен' : ', супер готов'}`;
+}
+
+function fighterCard(fighter, battle, selected) {
+  const acted = battle.actedIds.includes(fighter.id);
+  const canSelect = battle.turn === 'player' && fighter.alive && !acted;
+  return `<button class="field-card ${selected ? 'selected' : ''} ${acted ? 'acted' : ''} ${!fighter.alive ? 'down' : ''}" data-select-fighter="${fighter.id}" ${canSelect ? '' : 'disabled'}>
+    <span class="field-emoji">${fighter.emoji}</span>
+    <strong>${fighter.name}</strong>
+    ${hpBar(fighter)}
+    ${statusBadges(fighter)}
+  </button>`;
+}
+
+function enemyToken(fighter) {
+  return `<div class="enemy-token ${fighter.alive ? '' : 'down'}">
+    <span>${fighter.emoji}</span>
+    <strong>${fighter.name}</strong>
+    ${hpBar(fighter)}
+    ${statusBadges(fighter)}
+  </div>`;
+}
+
+function actionDock(battle) {
+  const selected = battle.playerTeam.find((fighter) => fighter.id === battle.selectedFighterId)
+    || battle.playerTeam.find((fighter) => fighter.alive && !battle.actedIds.includes(fighter.id));
+  const acted = selected ? battle.actedIds.includes(selected.id) : true;
+  const dead = selected ? !selected.alive : true;
+  const basicDisabled = !selected || dead || acted || battle.turn !== 'player';
+  const superUsed = selected ? battle.usedSupers.includes(selected.id) : true;
+  return `<div class="action-dock">
+    <div>
+      <strong>${selected ? `${selected.emoji} ${selected.name}` : 'Выбери карту'}</strong>
+      <p>${actionHint(battle, selected)}</p>
+    </div>
+    <div class="action-buttons">
+      <button data-manual-action="basic" data-fighter="${selected?.id || ''}" ${basicDisabled ? 'disabled' : ''}>Обычная атака</button>
+      <button data-manual-action="super" data-fighter="${selected?.id || ''}" ${basicDisabled || superUsed ? 'disabled' : ''}>Супер</button>
+    </div>
+  </div>`;
+}
+
+function activeArenaMarkup(state) {
   const battle = state.manualBattle;
-  if (!battle?.active) return `<button class="fight-button" data-start-battle="true">${icon('swords')} Начать ручной бой</button>`;
-  if (battle.turn !== 'player') return '<div class="turn-banner">🤖 Бот думает...</div>';
-  return `<div class="manual-actions">
-    <h3>${icon('swords')} Раунд ${battle.round}: выбери действие</h3>
-    ${battle.playerTeam.map((fighter) => {
-      const acted = battle.actedIds.includes(fighter.id);
-      const usedSuper = battle.usedSupers.includes(fighter.id);
-      const disabled = !fighter.alive || acted;
-      return `<article class="fighter-action ${!fighter.alive ? 'down' : ''}">
-        <strong>${fighter.emoji} ${fighter.name}</strong>
-        <span>${Math.max(0, fighter.currentHp)}/${fighter.maxHp} HP · щит ${fighter.shield}</span>
-        <div>
-          <button data-manual-action="basic" data-fighter="${fighter.id}" ${disabled ? 'disabled' : ''}>Атака</button>
-          <button data-manual-action="super" data-fighter="${fighter.id}" ${disabled || usedSuper ? 'disabled' : ''}>Супер</button>
-        </div>
-      </article>`;
-    }).join('')}
+  const selectedId = battle.selectedFighterId;
+  return `<div class="clash-arena">
+    <div class="arena-hud">
+      <span>Раунд ${battle.round}/5</span>
+      <strong>${battle.turn === 'player' ? 'Твой ход' : 'Ход бота'}</strong>
+      <span>${battle.playerTeam.filter((fighter) => fighter.alive).length}v${battle.enemyTeam.filter((fighter) => fighter.alive).length}</span>
+    </div>
+    <div class="enemy-line">
+      ${battle.enemyTeam.map(enemyToken).join('')}
+    </div>
+    <div class="arena-lane">
+      <div class="lane-glow"></div>
+      <strong>${battle.turn === 'player' ? 'Выбери карту снизу и ударь' : 'Стая бота контратакует'}</strong>
+      <p>${state.battleReport.at(-1) || 'Следи за HP и статусами прямо на поле.'}</p>
+    </div>
+    <div class="player-hand">
+      ${battle.playerTeam.map((fighter) => fighterCard(fighter, battle, fighter.id === selectedId)).join('')}
+    </div>
+    ${actionDock(battle)}
   </div>`;
 }
 

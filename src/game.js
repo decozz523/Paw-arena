@@ -74,6 +74,40 @@ export function botPower(state) {
   return botLineup(bot).reduce((sum, dog) => sum + dogScore(dog), 0) * tacticBonus;
 }
 
+export function arenaEffect(bot) {
+  return bot.arena || {
+    name: 'Нейтральная арена',
+    mood: 'ровные условия',
+    description: 'Без дополнительных модификаторов.',
+  };
+}
+
+function applyArenaEffect(bot, playerTeam, enemyTeam, report) {
+  const arena = arenaEffect(bot);
+  report.push(`🏟️ Арена «${arena.name}»: ${arena.description}`);
+
+  if (arena.playerShield) {
+    playerTeam.forEach((fighter) => { fighter.shield += arena.playerShield; });
+    report.push(`🧱 Декорации арены дают твоей стае стартовый щит ${arena.playerShield}.`);
+  }
+
+  if (arena.slowNonIce) {
+    [...playerTeam, ...enemyTeam].forEach((fighter) => {
+      if (fighter.element === 'Лёд') {
+        fighter.power += arena.icePower || 0;
+      } else {
+        fighter.slowed = Math.max(fighter.slowed, 1);
+      }
+    });
+    report.push('🌨️ Снежная буря замедляет всех без стихии Лёд, а ледяные бойцы получают бонус к атаке.');
+  }
+
+  if (arena.enemyFocus) {
+    enemyTeam.forEach((fighter) => { fighter.focus += arena.enemyFocus; });
+    report.push(`👑 Трибуны Альфы заряжают бота: враги получают фокус x${arena.enemyFocus}.`);
+  }
+}
+
 export function addLog(state, message) {
   state.log = [message, ...state.log].slice(0, 6);
 }
@@ -144,12 +178,18 @@ function makeFighter(dog, side) {
     focus: 0,
     slowed: 0,
     marked: 0,
+    stunned: 0,
     alive: true,
   };
 }
 
 function alive(team) {
   return team.filter((fighter) => fighter.alive && fighter.currentHp > 0);
+}
+
+function nextReadyFighterId(battle) {
+  const ready = battle.playerTeam.find((fighter) => fighter.alive && !battle.actedIds.includes(fighter.id));
+  return ready?.id || alive(battle.playerTeam)[0]?.id || null;
 }
 
 function pickTarget(attacker, enemies) {
@@ -265,6 +305,7 @@ function resolveBattle(state) {
     fighter.power = Math.round(fighter.power * combo.multiplier);
   });
   report.push(`🧬 Комбо стаи: ${combo.bonuses.join(' · ')}. Атака команды усилена до x${combo.multiplier.toFixed(2)}.`);
+  applyArenaEffect(selectedBot(state), playerTeam, enemyTeam, report);
   applyOpeningAbilities(playerTeam, enemyTeam, report);
 
   for (let round = 1; round <= 5; round += 1) {
@@ -307,13 +348,14 @@ export function fight(state) {
     const novaBonus = lineup.some((dog) => dog.id === 8) ? 25 : 0;
     const cleanWinBonus = result.playerHp > result.enemyHp + 90 ? 20 : 0;
     const streakBonus = Math.min(state.stats.streak + 1, 5) * 10;
-    const reward = bot.reward + novaBonus + streakBonus + cleanWinBonus;
+    const arenaBonus = arenaEffect(bot).bonusReward || 0;
+    const reward = bot.reward + novaBonus + streakBonus + cleanWinBonus + arenaBonus;
     state.points += reward;
     state.stats.wins += 1;
     state.stats.streak += 1;
     state.stats.bestStreak = Math.max(state.stats.bestStreak, state.stats.streak);
     if (!state.stats.defeatedBots.includes(bot.name)) state.stats.defeatedBots.push(bot.name);
-    addLog(state, `Победа над ${bot.name}! +${reward} очков (${streakBonus} серия${novaBonus ? ', 25 Нова' : ''}${cleanWinBonus ? ', 20 чистая победа' : ''}).`);
+    addLog(state, `Победа над ${bot.name}! +${reward} очков (${streakBonus} серия${novaBonus ? ', 25 Нова' : ''}${cleanWinBonus ? ', 20 чистая победа' : ''}${arenaBonus ? `, ${arenaBonus} арена` : ''}).`);
   } else {
     const consolation = Math.round(bot.reward * 0.25);
     state.points += consolation;
@@ -345,6 +387,7 @@ export function startManualBattle(state) {
     fighter.power = Math.round(fighter.power * combo.multiplier);
   });
   report.push(`🧬 Комбо стаи: ${combo.bonuses.join(' · ')}. Выбери собаку и действие.`);
+  applyArenaEffect(bot, playerTeam, enemyTeam, report);
   applyOpeningAbilities(playerTeam, enemyTeam, report);
   state.manualBattle = {
     active: true,
@@ -355,6 +398,7 @@ export function startManualBattle(state) {
     actedIds: [],
     usedSupers: [],
     botUsedSupers: [],
+    selectedFighterId: playerTeam[0]?.id || null,
     report,
     result: null,
   };
@@ -380,7 +424,8 @@ function manualSpecial(attacker, defenders, allies, battle) {
   if (attacker.role === 'Скаут') {
     target.marked = 3;
     target.slowed = 2;
-    return `🎯 Супер ${attacker.name}: ${target.name} получает метку и замедление.`;
+    target.stunned = 1;
+    return `🎯 Супер ${attacker.name}: ${target.name} получает метку, замедление и блок следующего действия.`;
   }
   if (attacker.role === 'Рывок') {
     defenders.filter((fighter) => fighter.alive).forEach((fighter) => { fighter.slowed = 2; });
@@ -419,16 +464,36 @@ function applyPlayerAction(state, dogId, action) {
     addLog(state, `${attacker.name} уже использовал суперспособность в этом бою.`);
     return false;
   }
+  if (attacker.stunned > 0) {
+    attacker.stunned = 0;
+    battle.actedIds.push(dogId);
+    battle.selectedFighterId = null;
+    battle.report.push(`⛔ ${attacker.emoji} ${attacker.name} заблокирован способностью соперника и пропускает действие.`);
+    if (finishManualBattleIfNeeded(state)) return true;
+    const readyForBot = alive(battle.playerTeam).every((fighter) => battle.actedIds.includes(fighter.id));
+    if (readyForBot) {
+      runBotTurn(state);
+    } else {
+      battle.selectedFighterId = nextReadyFighterId(battle);
+    }
+    state.battleReport = battle.report;
+    return true;
+  }
   const entry = action === 'super'
     ? manualSpecial(attacker, battle.enemyTeam, battle.playerTeam, battle)
     : attack(attacker, battle.enemyTeam, battle.playerTeam, battle.round);
   if (action === 'super') battle.usedSupers.push(dogId);
   battle.actedIds.push(dogId);
+  battle.selectedFighterId = null;
   battle.report.push(entry);
   tickStatuses([...battle.playerTeam, ...battle.enemyTeam]);
   if (finishManualBattleIfNeeded(state)) return true;
   const readyForBot = alive(battle.playerTeam).every((fighter) => battle.actedIds.includes(fighter.id));
-  if (readyForBot) runBotTurn(state);
+  if (readyForBot) {
+    runBotTurn(state);
+  } else {
+    battle.selectedFighterId = nextReadyFighterId(battle);
+  }
   state.battleReport = battle.report;
   return true;
 }
@@ -449,6 +514,11 @@ function runBotTurn(state) {
   const order = alive(battle.enemyTeam).sort((a, b) => fighterInitiative(b, battle.round) - fighterInitiative(a, battle.round));
   order.forEach((fighter) => {
     if (!fighter.alive || !alive(battle.playerTeam).length) return;
+    if (fighter.stunned > 0) {
+      fighter.stunned = 0;
+      battle.report.push(`🤖 ${fighter.name} заблокирован меткой и пропускает действие.`);
+      return;
+    }
     const useSuper = botWantsSuper(bot, fighter, battle);
     const entry = useSuper
       ? manualSpecial(fighter, battle.playerTeam, battle.enemyTeam, battle)
@@ -465,6 +535,7 @@ function runBotTurn(state) {
   battle.round += 1;
   battle.turn = 'player';
   battle.actedIds = [];
+  battle.selectedFighterId = nextReadyFighterId(battle);
   battle.report.push(`— Раунд ${battle.round}: твой ход —`);
 }
 
@@ -478,6 +549,7 @@ function finishManualBattleIfNeeded(state, forceByHp = false) {
   const won = enemyHp === 0 || (playerHp > 0 && playerHp >= enemyHp);
   battle.active = false;
   battle.turn = 'done';
+  battle.selectedFighterId = null;
   battle.result = { won, playerHp, enemyHp };
   state.battleSummary = battle.result;
   state.battleReport = battle.report;
@@ -493,13 +565,14 @@ function applyBattleRewards(state, won, playerHp, enemyHp) {
     const novaBonus = lineup.some((dog) => dog.id === 8) ? 25 : 0;
     const cleanWinBonus = playerHp > enemyHp + 90 ? 20 : 0;
     const streakBonus = Math.min(state.stats.streak + 1, 5) * 10;
-    const reward = bot.reward + novaBonus + streakBonus + cleanWinBonus;
+    const arenaBonus = arenaEffect(bot).bonusReward || 0;
+    const reward = bot.reward + novaBonus + streakBonus + cleanWinBonus + arenaBonus;
     state.points += reward;
     state.stats.wins += 1;
     state.stats.streak += 1;
     state.stats.bestStreak = Math.max(state.stats.bestStreak, state.stats.streak);
     if (!state.stats.defeatedBots.includes(bot.name)) state.stats.defeatedBots.push(bot.name);
-    addLog(state, `Ручная победа над ${bot.name}! +${reward} очков.`);
+    addLog(state, `Ручная победа над ${bot.name}! +${reward} очков${arenaBonus ? ` (арена +${arenaBonus})` : ''}.`);
   } else {
     const consolation = Math.round(bot.reward * 0.25);
     state.points += consolation;
@@ -509,6 +582,15 @@ function applyBattleRewards(state, won, playerHp, enemyHp) {
   }
   unlockNextBot(state);
   checkAchievements(state);
+}
+
+export function selectManualFighter(state, dogId) {
+  const battle = state.manualBattle;
+  if (!battle?.active || battle.turn !== 'player') return false;
+  const fighter = fighterById(battle.playerTeam, dogId);
+  if (!fighter || !fighter.alive || battle.actedIds.includes(dogId)) return false;
+  battle.selectedFighterId = dogId;
+  return true;
 }
 
 export function playerManualAction(state, dogId, action) {
