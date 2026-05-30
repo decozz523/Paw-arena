@@ -649,3 +649,39 @@ h1 {
     flex-direction: column;
   }
 }
+
+.battle-summary {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dbe6ff;
+}
+
+.battle-summary.won {
+  border: 1px solid rgba(118, 230, 168, 0.45);
+}
+
+.battle-summary.lost {
+  border: 1px solid rgba(255, 141, 87, 0.45);
+}
+
+.battle-summary strong {
+  color: #fff;
+}
+
+.battle-report .round-title {
+  margin-top: 14px;
+  color: #ffdc83;
+  font-weight: 900;
+}
+
+@media (max-width: 680px) {
+  .battle-summary {
+    grid-template-columns: 1fr;
+  }
+}

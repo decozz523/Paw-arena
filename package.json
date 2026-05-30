@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 4173",
-    "check": "node --check src/main.js"
+    "check": "for file in src/*.js; do node --check \"$file\" || exit 1; done"
   }
 }
