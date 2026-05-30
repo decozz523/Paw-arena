@@ -1,0 +1,10 @@
+{
+  "name": "paw-arena",
+  "version": "1.0.0",
+  "description": "Responsive Pokemon-style dog card battler with collection, shop, and bot battles.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 4173",
+    "check": "node --check src/main.js"
+  }
+}
