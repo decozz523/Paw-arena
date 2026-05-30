@@ -10,6 +10,8 @@ export function createDefaultState() {
     points: 220,
     collection: createCollection(),
     selectedBotIndex: 0,
+    playerTeamIds: [1, 2, 3],
+    manualBattle: null,
     log: ['Добро пожаловать в Paw Arena! Теперь у стаи есть способности, миссии, серии побед и автосохранение.'],
     lastPack: [],
     battleReport: ['Выбери соперника и начни бой, чтобы увидеть пошаговую схватку с HP, критами и способностями.'],

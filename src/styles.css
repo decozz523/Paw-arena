@@ -685,3 +685,100 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+.manual-team-panel,
+.manual-actions,
+.turn-banner {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.manual-team-panel h3,
+.manual-actions h3 {
+  margin: 0 0 12px;
+  color: #ffdc83;
+}
+
+.manual-team-panel small {
+  display: block;
+  margin-top: 10px;
+  color: #aebbd6;
+}
+
+.team-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.team-chip {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #dbe6ff;
+}
+
+.team-chip.active {
+  background: linear-gradient(135deg, #76e6a8, #54a9ff);
+  color: #06101b;
+}
+
+.manual-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.fighter-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.fighter-action.down {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+}
+
+.fighter-action span {
+  color: #c8d3e8;
+}
+
+.fighter-action div {
+  display: flex;
+  gap: 8px;
+}
+
+.fighter-action button {
+  padding: 10px 12px;
+  background: #f8fbff;
+  color: #101629;
+}
+
+.fighter-action button[data-manual-action="super"] {
+  background: linear-gradient(135deg, #ffce5c, #ff8d57);
+  color: #1f1606;
+}
+
+.turn-banner {
+  color: #ffdc83;
+  font-weight: 900;
+  text-align: center;
+}
+
+@media (max-width: 680px) {
+  .fighter-action {
+    grid-template-columns: 1fr;
+  }
+
+  .fighter-action div,
+  .fighter-action button {
+    width: 100%;
+  }
+}

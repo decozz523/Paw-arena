@@ -1,5 +1,5 @@
 import { questDefinitions } from './data.js';
-import { buyPack, checkAchievements, claimQuest, fight, isBotLocked, selectedBot, upgradeDog, addLog } from './game.js';
+import { buyPack, checkAchievements, claimQuest, isBotLocked, playerManualAction, selectedBot, startManualBattle, toggleTeamDog, upgradeDog, addLog } from './game.js';
 import { renderApp } from './render.js';
 import { createDefaultState, loadState, resetSavedState, saveState } from './state.js';
 
@@ -47,8 +47,16 @@ app.addEventListener('click', (event) => {
     render();
   }
   if (button.dataset.bot) setBot(Number(button.dataset.bot));
-  if (button.dataset.fight) {
-    fight(state);
+  if (button.dataset.startBattle) {
+    startManualBattle(state);
+    render();
+  }
+  if (button.dataset.manualAction) {
+    playerManualAction(state, Number(button.dataset.fighter), button.dataset.manualAction);
+    render();
+  }
+  if (button.dataset.teamDog) {
+    toggleTeamDog(state, Number(button.dataset.teamDog));
     render();
   }
   if (button.dataset.quest) {
