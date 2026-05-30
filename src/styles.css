@@ -456,3 +456,196 @@ h1 {
     margin: 0 auto;
   }
 }
+
+.ability-text {
+  min-height: 58px;
+  margin-bottom: 10px;
+  color: #cfd9ee;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.odds-card,
+.synergy-card,
+.battle-report,
+.profile-card,
+.quest-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.odds-card {
+  margin-top: 18px;
+  padding: 16px;
+}
+
+.odds-card h3,
+.synergy-card h3,
+.battle-report h3 {
+  margin: 0 0 10px;
+}
+
+.odds-card span {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0;
+  color: #dbe6ff;
+}
+
+.synergy-card {
+  margin: 22px 0 0;
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.synergy-card strong {
+  color: #ffdc83;
+}
+
+.synergy-card p {
+  margin: 8px 0 0;
+  color: #c8d3e8;
+}
+
+.battle-report {
+  margin-top: 18px;
+  padding: 16px;
+}
+
+.battle-report h3 {
+  color: #ffdc83;
+}
+
+.battle-report p {
+  margin-bottom: 10px;
+  color: #c8d3e8;
+  line-height: 1.45;
+}
+
+.bot-button[aria-disabled="true"] {
+  opacity: 0.58;
+}
+
+.progress-layout {
+  display: grid;
+  grid-template-columns: 0.9fr 1.2fr 0.9fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.profile-card,
+.quest-card {
+  padding: 18px;
+  background: rgba(13, 20, 39, 0.78);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+}
+
+.profile-card h2,
+.quest-card h2 {
+  margin-bottom: 14px;
+}
+
+.profile-stats {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-stats span,
+.achievement {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dbe6ff;
+}
+
+.profile-stats strong {
+  color: #fff;
+}
+
+.ghost-button {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fbff;
+}
+
+.quest-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.quest-row strong,
+.quest-row small {
+  display: block;
+}
+
+.quest-row small,
+.achievement small {
+  margin-top: 4px;
+  color: #aebbd6;
+}
+
+.quest-row.done,
+.achievement.done {
+  background: rgba(118, 230, 168, 0.12);
+}
+
+.quest-row button {
+  min-width: 132px;
+  padding: 11px 12px;
+  background: linear-gradient(135deg, #ffce5c, #ff8d57);
+  color: #1f1606;
+}
+
+.progress-bar {
+  height: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #76e6a8, #54a9ff);
+}
+
+@media (max-width: 980px) {
+  .progress-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .progress-layout {
+    gap: 10px;
+  }
+
+  .quest-row {
+    grid-template-columns: 1fr;
+  }
+
+  .quest-row button {
+    width: 100%;
+  }
+
+  .profile-stats span,
+  .achievement {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
