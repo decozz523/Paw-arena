@@ -25,7 +25,7 @@ export function renderApp(state) {
     <nav class="scene-tabs" aria-label="Сцены игры">
       <button class="${state.scene === 'collection' ? 'active' : ''}" data-scene="collection">${icon('bone')} Карты</button>
       <button class="${state.scene === 'shop' ? 'active' : ''}" data-scene="shop">${icon('shop')} Магазин</button>
-      <button class="${state.scene === 'battle' ? 'active' : ''}" data-scene="battle">${icon('swords')} Бой</button>
+      <button class="${state.scene === 'battle' ? 'active' : ''}" data-scene="battle">${icon('swords')} Арена</button>
     </nav>
 
     ${activeSceneMarkup(state)}

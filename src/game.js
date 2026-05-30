@@ -178,12 +178,18 @@ function makeFighter(dog, side) {
     focus: 0,
     slowed: 0,
     marked: 0,
+    stunned: 0,
     alive: true,
   };
 }
 
 function alive(team) {
   return team.filter((fighter) => fighter.alive && fighter.currentHp > 0);
+}
+
+function nextReadyFighterId(battle) {
+  const ready = battle.playerTeam.find((fighter) => fighter.alive && !battle.actedIds.includes(fighter.id));
+  return ready?.id || alive(battle.playerTeam)[0]?.id || null;
 }
 
 function pickTarget(attacker, enemies) {
@@ -392,6 +398,7 @@ export function startManualBattle(state) {
     actedIds: [],
     usedSupers: [],
     botUsedSupers: [],
+    selectedFighterId: playerTeam[0]?.id || null,
     report,
     result: null,
   };
@@ -417,7 +424,8 @@ function manualSpecial(attacker, defenders, allies, battle) {
   if (attacker.role === 'Скаут') {
     target.marked = 3;
     target.slowed = 2;
-    return `🎯 Супер ${attacker.name}: ${target.name} получает метку и замедление.`;
+    target.stunned = 1;
+    return `🎯 Супер ${attacker.name}: ${target.name} получает метку, замедление и блок следующего действия.`;
   }
   if (attacker.role === 'Рывок') {
     defenders.filter((fighter) => fighter.alive).forEach((fighter) => { fighter.slowed = 2; });
@@ -456,16 +464,36 @@ function applyPlayerAction(state, dogId, action) {
     addLog(state, `${attacker.name} уже использовал суперспособность в этом бою.`);
     return false;
   }
+  if (attacker.stunned > 0) {
+    attacker.stunned = 0;
+    battle.actedIds.push(dogId);
+    battle.selectedFighterId = null;
+    battle.report.push(`⛔ ${attacker.emoji} ${attacker.name} заблокирован способностью соперника и пропускает действие.`);
+    if (finishManualBattleIfNeeded(state)) return true;
+    const readyForBot = alive(battle.playerTeam).every((fighter) => battle.actedIds.includes(fighter.id));
+    if (readyForBot) {
+      runBotTurn(state);
+    } else {
+      battle.selectedFighterId = nextReadyFighterId(battle);
+    }
+    state.battleReport = battle.report;
+    return true;
+  }
   const entry = action === 'super'
     ? manualSpecial(attacker, battle.enemyTeam, battle.playerTeam, battle)
     : attack(attacker, battle.enemyTeam, battle.playerTeam, battle.round);
   if (action === 'super') battle.usedSupers.push(dogId);
   battle.actedIds.push(dogId);
+  battle.selectedFighterId = null;
   battle.report.push(entry);
   tickStatuses([...battle.playerTeam, ...battle.enemyTeam]);
   if (finishManualBattleIfNeeded(state)) return true;
   const readyForBot = alive(battle.playerTeam).every((fighter) => battle.actedIds.includes(fighter.id));
-  if (readyForBot) runBotTurn(state);
+  if (readyForBot) {
+    runBotTurn(state);
+  } else {
+    battle.selectedFighterId = nextReadyFighterId(battle);
+  }
   state.battleReport = battle.report;
   return true;
 }
@@ -486,6 +514,11 @@ function runBotTurn(state) {
   const order = alive(battle.enemyTeam).sort((a, b) => fighterInitiative(b, battle.round) - fighterInitiative(a, battle.round));
   order.forEach((fighter) => {
     if (!fighter.alive || !alive(battle.playerTeam).length) return;
+    if (fighter.stunned > 0) {
+      fighter.stunned = 0;
+      battle.report.push(`🤖 ${fighter.name} заблокирован меткой и пропускает действие.`);
+      return;
+    }
     const useSuper = botWantsSuper(bot, fighter, battle);
     const entry = useSuper
       ? manualSpecial(fighter, battle.playerTeam, battle.enemyTeam, battle)
@@ -502,6 +535,7 @@ function runBotTurn(state) {
   battle.round += 1;
   battle.turn = 'player';
   battle.actedIds = [];
+  battle.selectedFighterId = nextReadyFighterId(battle);
   battle.report.push(`— Раунд ${battle.round}: твой ход —`);
 }
 
@@ -515,6 +549,7 @@ function finishManualBattleIfNeeded(state, forceByHp = false) {
   const won = enemyHp === 0 || (playerHp > 0 && playerHp >= enemyHp);
   battle.active = false;
   battle.turn = 'done';
+  battle.selectedFighterId = null;
   battle.result = { won, playerHp, enemyHp };
   state.battleSummary = battle.result;
   state.battleReport = battle.report;
@@ -547,6 +582,15 @@ function applyBattleRewards(state, won, playerHp, enemyHp) {
   }
   unlockNextBot(state);
   checkAchievements(state);
+}
+
+export function selectManualFighter(state, dogId) {
+  const battle = state.manualBattle;
+  if (!battle?.active || battle.turn !== 'player') return false;
+  const fighter = fighterById(battle.playerTeam, dogId);
+  if (!fighter || !fighter.alive || battle.actedIds.includes(dogId)) return false;
+  battle.selectedFighterId = dogId;
+  return true;
 }
 
 export function playerManualAction(state, dogId, action) {

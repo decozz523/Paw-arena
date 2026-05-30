@@ -1106,3 +1106,330 @@ body::after {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Bottom navigation and arena-focused battle flow */
+.scene-tabs {
+  position: fixed;
+  right: 50%;
+  bottom: 16px;
+  top: auto;
+  z-index: 20;
+  width: min(560px, calc(100% - 28px));
+  margin: 0;
+  transform: translateX(50%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.46);
+}
+
+.app-shell {
+  padding-bottom: 120px;
+}
+
+.battle-layout {
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+}
+
+.arena-card {
+  align-content: stretch;
+  min-height: 680px;
+}
+
+.clash-arena {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: clamp(14px, 2vw, 22px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 28px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 50% 45%, rgba(118, 230, 168, 0.2), transparent 34%),
+    linear-gradient(180deg, rgba(54, 78, 126, 0.54), rgba(18, 31, 51, 0.9));
+  background-size: auto, 54px 54px, auto, auto;
+  box-shadow: inset 0 0 80px rgba(84, 169, 255, 0.13);
+}
+
+.arena-hud,
+.action-dock {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  background: rgba(3, 8, 18, 0.58);
+  backdrop-filter: blur(16px);
+}
+
+.arena-hud strong {
+  justify-self: center;
+  color: #ffdc83;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.arena-hud span {
+  color: #c8d3e8;
+  font-weight: 900;
+}
+
+.enemy-line,
+.player-hand {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.enemy-token,
+.field-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 20px;
+  background: rgba(4, 9, 22, 0.58);
+  color: #f8fbff;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.22);
+}
+
+.enemy-token {
+  text-align: center;
+}
+
+.enemy-token > span,
+.field-emoji {
+  display: block;
+  font-size: clamp(2.15rem, 6vw, 3.5rem);
+  line-height: 1;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.36));
+}
+
+.enemy-token strong,
+.field-card strong {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.enemy-token small,
+.field-card small {
+  display: block;
+  min-height: 18px;
+  color: #aebbd6;
+  font-size: 0.76rem;
+}
+
+.enemy-token.down,
+.field-card.down,
+.field-card.acted {
+  opacity: 0.48;
+  filter: grayscale(0.85);
+}
+
+.field-card {
+  cursor: pointer;
+  text-align: left;
+}
+
+.field-card:not(:disabled):hover,
+.field-card.selected {
+  transform: translateY(-6px) scale(1.02);
+  border-color: rgba(255, 220, 131, 0.72);
+  background: linear-gradient(180deg, rgba(255, 220, 131, 0.18), rgba(84, 169, 255, 0.12));
+  box-shadow: 0 18px 46px rgba(255, 206, 92, 0.18), 0 0 0 3px rgba(255, 220, 131, 0.1);
+}
+
+.arena-lane {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: clamp(150px, 25vw, 240px);
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at center, rgba(255, 220, 131, 0.22), transparent 20%),
+    linear-gradient(90deg, transparent 48%, rgba(255, 255, 255, 0.16) 49%, rgba(255, 255, 255, 0.16) 51%, transparent 52%),
+    linear-gradient(135deg, rgba(118, 230, 168, 0.14), rgba(84, 169, 255, 0.1));
+  text-align: center;
+}
+
+.lane-glow {
+  position: absolute;
+  width: 150px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 220, 131, 0.34), transparent 66%);
+  animation: pulse-glow 2.4s ease-in-out infinite;
+}
+
+.arena-lane strong,
+.arena-lane p {
+  position: relative;
+  z-index: 1;
+}
+
+.arena-lane strong {
+  color: #ffdc83;
+  font-size: clamp(1.15rem, 3vw, 2rem);
+}
+
+.arena-lane p {
+  max-width: 640px;
+  margin: 8px auto 0;
+  color: #dbe6ff;
+}
+
+.action-dock {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.action-dock p {
+  margin: 4px 0 0;
+  color: #aebbd6;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.action-buttons button {
+  padding: 12px 14px;
+  background: #f8fbff;
+  color: #101629;
+}
+
+.action-buttons button[data-manual-action="super"] {
+  background: linear-gradient(135deg, #ffce5c, #ff8d57);
+  color: #1f1606;
+}
+
+.battle-report {
+  max-height: 260px;
+  overflow: auto;
+}
+
+@media (max-width: 980px) {
+  .battle-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .arena-card {
+    order: 1;
+    min-height: auto;
+  }
+
+  .bot-list {
+    order: 2;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .scene-tabs {
+    bottom: 10px;
+    width: min(100% - 16px, 560px);
+    padding: 6px;
+    border-radius: 22px;
+  }
+
+  .app-shell {
+    padding-bottom: 105px;
+  }
+
+  .hero-card {
+    margin-bottom: 10px;
+  }
+
+  .bot-list {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .bot-button {
+    min-width: 210px;
+  }
+
+  .versus,
+  .synergy-card {
+    display: none;
+  }
+
+  .arena-card {
+    padding: 12px;
+  }
+
+  .clash-arena {
+    gap: 10px;
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 24px;
+  }
+
+  .arena-hud,
+  .action-dock {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .enemy-line,
+  .player-hand {
+    grid-template-columns: repeat(3, minmax(94px, 1fr));
+    gap: 8px;
+  }
+
+  .enemy-token,
+  .field-card {
+    padding: 9px;
+    border-radius: 16px;
+  }
+
+  .enemy-token small,
+  .field-card small {
+    font-size: 0.66rem;
+  }
+
+  .arena-lane {
+    min-height: 132px;
+    padding: 18px 12px;
+  }
+
+  .player-hand {
+    position: sticky;
+    bottom: 90px;
+    z-index: 8;
+    padding: 8px;
+    margin: -8px;
+    border-radius: 20px;
+    background: rgba(5, 10, 23, 0.72);
+    backdrop-filter: blur(14px);
+  }
+
+  .action-dock {
+    position: sticky;
+    bottom: 10px;
+    z-index: 9;
+  }
+
+  .action-buttons,
+  .action-buttons button {
+    width: 100%;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .battle-report {
+    max-height: 160px;
+  }
+}
