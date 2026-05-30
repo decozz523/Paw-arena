@@ -74,6 +74,40 @@ export function botPower(state) {
   return botLineup(bot).reduce((sum, dog) => sum + dogScore(dog), 0) * tacticBonus;
 }
 
+export function arenaEffect(bot) {
+  return bot.arena || {
+    name: 'Нейтральная арена',
+    mood: 'ровные условия',
+    description: 'Без дополнительных модификаторов.',
+  };
+}
+
+function applyArenaEffect(bot, playerTeam, enemyTeam, report) {
+  const arena = arenaEffect(bot);
+  report.push(`🏟️ Арена «${arena.name}»: ${arena.description}`);
+
+  if (arena.playerShield) {
+    playerTeam.forEach((fighter) => { fighter.shield += arena.playerShield; });
+    report.push(`🧱 Декорации арены дают твоей стае стартовый щит ${arena.playerShield}.`);
+  }
+
+  if (arena.slowNonIce) {
+    [...playerTeam, ...enemyTeam].forEach((fighter) => {
+      if (fighter.element === 'Лёд') {
+        fighter.power += arena.icePower || 0;
+      } else {
+        fighter.slowed = Math.max(fighter.slowed, 1);
+      }
+    });
+    report.push('🌨️ Снежная буря замедляет всех без стихии Лёд, а ледяные бойцы получают бонус к атаке.');
+  }
+
+  if (arena.enemyFocus) {
+    enemyTeam.forEach((fighter) => { fighter.focus += arena.enemyFocus; });
+    report.push(`👑 Трибуны Альфы заряжают бота: враги получают фокус x${arena.enemyFocus}.`);
+  }
+}
+
 export function addLog(state, message) {
   state.log = [message, ...state.log].slice(0, 6);
 }
@@ -265,6 +299,7 @@ function resolveBattle(state) {
     fighter.power = Math.round(fighter.power * combo.multiplier);
   });
   report.push(`🧬 Комбо стаи: ${combo.bonuses.join(' · ')}. Атака команды усилена до x${combo.multiplier.toFixed(2)}.`);
+  applyArenaEffect(selectedBot(state), playerTeam, enemyTeam, report);
   applyOpeningAbilities(playerTeam, enemyTeam, report);
 
   for (let round = 1; round <= 5; round += 1) {
@@ -307,13 +342,14 @@ export function fight(state) {
     const novaBonus = lineup.some((dog) => dog.id === 8) ? 25 : 0;
     const cleanWinBonus = result.playerHp > result.enemyHp + 90 ? 20 : 0;
     const streakBonus = Math.min(state.stats.streak + 1, 5) * 10;
-    const reward = bot.reward + novaBonus + streakBonus + cleanWinBonus;
+    const arenaBonus = arenaEffect(bot).bonusReward || 0;
+    const reward = bot.reward + novaBonus + streakBonus + cleanWinBonus + arenaBonus;
     state.points += reward;
     state.stats.wins += 1;
     state.stats.streak += 1;
     state.stats.bestStreak = Math.max(state.stats.bestStreak, state.stats.streak);
     if (!state.stats.defeatedBots.includes(bot.name)) state.stats.defeatedBots.push(bot.name);
-    addLog(state, `Победа над ${bot.name}! +${reward} очков (${streakBonus} серия${novaBonus ? ', 25 Нова' : ''}${cleanWinBonus ? ', 20 чистая победа' : ''}).`);
+    addLog(state, `Победа над ${bot.name}! +${reward} очков (${streakBonus} серия${novaBonus ? ', 25 Нова' : ''}${cleanWinBonus ? ', 20 чистая победа' : ''}${arenaBonus ? `, ${arenaBonus} арена` : ''}).`);
   } else {
     const consolation = Math.round(bot.reward * 0.25);
     state.points += consolation;
@@ -345,6 +381,7 @@ export function startManualBattle(state) {
     fighter.power = Math.round(fighter.power * combo.multiplier);
   });
   report.push(`🧬 Комбо стаи: ${combo.bonuses.join(' · ')}. Выбери собаку и действие.`);
+  applyArenaEffect(bot, playerTeam, enemyTeam, report);
   applyOpeningAbilities(playerTeam, enemyTeam, report);
   state.manualBattle = {
     active: true,
@@ -493,13 +530,14 @@ function applyBattleRewards(state, won, playerHp, enemyHp) {
     const novaBonus = lineup.some((dog) => dog.id === 8) ? 25 : 0;
     const cleanWinBonus = playerHp > enemyHp + 90 ? 20 : 0;
     const streakBonus = Math.min(state.stats.streak + 1, 5) * 10;
-    const reward = bot.reward + novaBonus + streakBonus + cleanWinBonus;
+    const arenaBonus = arenaEffect(bot).bonusReward || 0;
+    const reward = bot.reward + novaBonus + streakBonus + cleanWinBonus + arenaBonus;
     state.points += reward;
     state.stats.wins += 1;
     state.stats.streak += 1;
     state.stats.bestStreak = Math.max(state.stats.bestStreak, state.stats.streak);
     if (!state.stats.defeatedBots.includes(bot.name)) state.stats.defeatedBots.push(bot.name);
-    addLog(state, `Ручная победа над ${bot.name}! +${reward} очков.`);
+    addLog(state, `Ручная победа над ${bot.name}! +${reward} очков${arenaBonus ? ` (арена +${arenaBonus})` : ''}.`);
   } else {
     const consolation = Math.round(bot.reward * 0.25);
     state.points += consolation;
