@@ -69,20 +69,29 @@ let state = loadState();
 const app = document.querySelector('#root');
 
 function loadState() {
-  const saved = localStorage.getItem(SAVE_KEY);
-  if (!saved) return createDefaultState();
-  const parsed = JSON.parse(saved);
   const defaults = createDefaultState();
-  return {
-    ...defaults,
-    ...parsed,
-    stats: { ...defaults.stats, ...parsed.stats },
-    collection: defaults.collection.map((dog) => ({ ...dog, ...(parsed.collection || []).find((savedDog) => savedDog.id === dog.id) })),
-  };
+  try {
+    const saved = localStorage.getItem(SAVE_KEY);
+    if (!saved) return defaults;
+    const parsed = JSON.parse(saved);
+    return {
+      ...defaults,
+      ...parsed,
+      stats: { ...defaults.stats, ...parsed.stats },
+      collection: defaults.collection.map((dog) => ({ ...dog, ...(parsed.collection || []).find((savedDog) => savedDog.id === dog.id) })),
+    };
+  } catch (error) {
+    console.warn('Не удалось загрузить сохранение Paw Arena, создан новый профиль.', error);
+    return defaults;
+  }
 }
 
 function saveState() {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn('Не удалось сохранить прогресс Paw Arena.', error);
+  }
 }
 
 function icon(name) {
