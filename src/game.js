@@ -104,23 +104,37 @@ function applyArenaEffect(bot, playerTeam, enemyTeam, report) {
 
   if (arena.enemyFocus) {
     enemyTeam.forEach((fighter) => { fighter.focus += arena.enemyFocus; });
-    report.push(`👑 Трибуны Альфы заряжают бота: враги получают фокус x${arena.enemyFocus}.`);
+    report.push(`👑 Трибуны заряжают бота: враги получают фокус x${arena.enemyFocus}.`);
   }
+
+  if (arena.superSurge) report.push('🌑 Лунный купол усиливает супер-ходы каждый второй раунд.');
+  if (arena.shieldDrain) report.push(`🧪 Щиты нестабильны: в конце обменов они тают на ${arena.shieldDrain}.`);
 }
+
 
 export function addLog(state, message) {
   state.log = [message, ...state.log].slice(0, 6);
 }
 
-export function rollDog(packId) {
-  const boost = packId === 'champion' ? 7 : packId === 'standard' ? 3 : 0;
-  const roll = Math.random() * 100;
+function rarityChance(packId, state) {
+  const boost = packId === 'champion' ? 8 : packId === 'standard' ? 4 : 0;
+  const pity = state?.packPity || 0;
+  return rarityOrder.map((rarity) => {
+    const rareBoost = rarity === 'Эпическая' ? Math.min(10, pity * 1.2) : rarity === 'Легендарная' ? Math.min(9, pity * 0.55) : 0;
+    const penalty = rarity === 'Обычная' ? boost + rareBoost * 0.9 : rarity === 'Редкая' ? boost * 0.2 : 0;
+    return { rarity, chance: Math.max(3, rarityMeta[rarity].packChance + (rarity === 'Эпическая' || rarity === 'Легендарная' ? boost + rareBoost : -penalty)) };
+  });
+}
+
+export function rollDog(packId, state = null) {
+  const table = rarityChance(packId, state);
+  const total = table.reduce((sum, item) => sum + item.chance, 0);
+  const roll = Math.random() * total;
   let cursor = 0;
-  for (const rarity of rarityOrder) {
-    const chance = rarityMeta[rarity].packChance + (rarity === 'Эпическая' || rarity === 'Легендарная' ? boost : -boost / 2);
-    cursor += Math.max(2, chance);
+  for (const item of table) {
+    cursor += item.chance;
     if (roll <= cursor) {
-      const pool = baseDogs.filter((dog) => dog.rarity === rarity);
+      const pool = baseDogs.filter((dog) => dog.rarity === item.rarity);
       return pool[Math.floor(Math.random() * pool.length)];
     }
   }
@@ -153,16 +167,18 @@ export function buyPack(state, packId) {
     addLog(state, `Для покупки «${pack.title}» нужно ещё ${pack.price - state.points} очков.`);
     return false;
   }
-  const drops = Array.from({ length: pack.cards }, () => rollDog(pack.id));
+  const drops = Array.from({ length: pack.cards }, () => rollDog(pack.id, state));
   state.points -= pack.price;
   state.lastPack = drops;
   state.stats.packsOpened += 1;
+  const bestDropIndex = Math.max(...drops.map((drop) => rarityOrder.indexOf(drop.rarity)));
+  state.packPity = bestDropIndex >= rarityOrder.indexOf('Эпическая') ? 0 : (state.packPity || 0) + 1 + (pack.pity || 0);
   drops.forEach((drop) => {
     const dog = state.collection.find((item) => item.id === drop.id);
     dog.level = dog.level || 1;
     dog.copies += 1;
   });
-  addLog(state, `Открыт ${pack.title}: ${drops.map((dog) => `${dog.emoji} ${dog.name}`).join(', ')}.`);
+  addLog(state, `Открыт ${pack.title}: ${drops.map((dog) => `${dog.emoji} ${dog.name}`).join(', ')}. Pity: ${state.packPity}.`);
   checkAchievements(state);
   return true;
 }
@@ -179,6 +195,13 @@ function makeFighter(dog, side) {
     slowed: 0,
     marked: 0,
     stunned: 0,
+    burn: 0,
+    trap: 0,
+    taunt: 0,
+    evade: 0,
+    silenced: 0,
+    vulnerable: 0,
+    speedBoost: 0,
     alive: true,
   };
 }
@@ -225,11 +248,11 @@ function applyOpeningAbilities(playerTeam, enemyTeam, report) {
 function fighterInitiative(fighter, round) {
   const slowPenalty = fighter.slowed > 0 ? 8 : 0;
   const openingBonus = fighter.role === 'Штурм' && round === 1 ? 10 : 0;
-  return fighter.speed + openingBonus - slowPenalty + Math.random() * 8;
+  return fighter.speed + fighter.speedBoost * 5 + openingBonus - slowPenalty + Math.random() * 8;
 }
 
-function attack(attacker, defenders, allies, round) {
-  const target = pickTarget(attacker, defenders);
+function attack(attacker, defenders, allies, round, forcedTarget = null, powerModifier = 1) {
+  const target = forcedTarget && forcedTarget.alive ? forcedTarget : pickTarget(attacker, defenders);
   if (!target) return `${attacker.emoji} ${attacker.name} не находит цель.`;
 
   let multiplier = 0.78 + Math.random() * 0.34;
@@ -252,6 +275,10 @@ function attack(attacker, defenders, allies, round) {
     target.marked -= 1;
     tags.push('метка скаута');
   }
+  if (target.vulnerable > 0) {
+    multiplier += 0.18;
+    tags.push('уязвимость');
+  }
   const critical = Math.random() < Math.min(0.3, 0.06 + attacker.speed / 180);
   if (critical) {
     multiplier += 0.35;
@@ -262,9 +289,13 @@ function attack(attacker, defenders, allies, round) {
     tags.push('стойкость титана');
   }
 
-  const shieldBlock = Math.min(target.shield, Math.round(attacker.power * 0.32));
+  if (target.evade > 0 && Math.random() < 0.35) {
+    target.evade -= 1;
+    return `${target.emoji} ${target.name} уходит от атаки ${attacker.name}: уклонение сработало.`;
+  }
+  const shieldBlock = Math.min(target.shield, Math.round(attacker.power * 0.32 * powerModifier));
   target.shield -= shieldBlock;
-  const damage = Math.max(4, Math.round((attacker.power + attacker.level * 4) * multiplier - shieldBlock));
+  const damage = Math.max(4, Math.round((attacker.power + attacker.level * 4) * multiplier * powerModifier - shieldBlock));
   target.currentHp = Math.max(0, target.currentHp - damage);
   if (target.currentHp === 0) target.alive = false;
 
@@ -285,10 +316,21 @@ function attack(attacker, defenders, allies, round) {
   return `${attacker.emoji} ${attacker.name} бьёт ${target.emoji} ${target.name} на ${damage} HP${shieldBlock ? ` (щит -${shieldBlock})` : ''}. ${target.name}: ${target.currentHp}/${target.maxHp} HP${tags.length ? ` · ${tags.join(', ')}` : ''}.`;
 }
 
-function tickStatuses(team) {
+function tickStatuses(team, shieldDrain = 0) {
   team.forEach((fighter) => {
     if (fighter.slowed > 0) fighter.slowed -= 1;
     if (fighter.marked > 0) fighter.marked -= 1;
+    if (fighter.taunt > 0) fighter.taunt -= 1;
+    if (fighter.evade > 0) fighter.evade -= 1;
+    if (fighter.silenced > 0) fighter.silenced -= 1;
+    if (fighter.vulnerable > 0) fighter.vulnerable -= 1;
+    if (fighter.speedBoost > 0) fighter.speedBoost -= 1;
+    if (shieldDrain > 0 && fighter.shield > 0) fighter.shield = Math.max(0, fighter.shield - shieldDrain);
+    if (fighter.burn > 0 && fighter.alive) {
+      fighter.currentHp = Math.max(0, fighter.currentHp - (5 + fighter.level * 2));
+      fighter.burn -= 1;
+      if (fighter.currentHp === 0) fighter.alive = false;
+    }
   });
 }
 
@@ -318,7 +360,7 @@ function resolveBattle(state) {
       const allies = fighter.side === 'player' ? playerTeam : enemyTeam;
       report.push(attack(fighter, defenders, allies, round));
     });
-    tickStatuses([...playerTeam, ...enemyTeam]);
+    tickStatuses([...playerTeam, ...enemyTeam], arenaEffect(selectedBot(state)).shieldDrain || 0);
   }
 
   const playerHp = teamHp(playerTeam);
@@ -399,6 +441,8 @@ export function startManualBattle(state) {
     usedSupers: [],
     botUsedSupers: [],
     selectedFighterId: playerTeam[0]?.id || null,
+    selectedTargetId: enemyTeam[0]?.id || null,
+    superSurge: Boolean(bot.arena?.superSurge),
     report,
     result: null,
   };
@@ -412,43 +456,117 @@ function fighterById(team, id) {
   return team.find((fighter) => fighter.id === id);
 }
 
+function preferredTarget(attacker, defenders, requestedTarget = null) {
+  const taunting = alive(defenders).find((fighter) => fighter.taunt > 0);
+  if (taunting) return taunting;
+  return requestedTarget && requestedTarget.alive ? requestedTarget : pickTarget(attacker, defenders);
+}
+
+function hurt(target, amount) {
+  target.currentHp = Math.max(0, target.currentHp - amount);
+  if (target.currentHp === 0) target.alive = false;
+}
+
+function lowestAlly(allies) {
+  return alive(allies).sort((a, b) => (a.currentHp / a.maxHp) - (b.currentHp / b.maxHp))[0];
+}
+
+function performManualMove(attacker, defenders, allies, battle, action, requestedTarget = null) {
+  const target = preferredTarget(attacker, defenders, requestedTarget);
+  const tags = [];
+  if (!target && action !== 'guard') return `${attacker.name} не находит цель.`;
+
+  if (attacker.trap > 0) {
+    const trapDamage = 6 + attacker.level * 2;
+    hurt(attacker, trapDamage);
+    attacker.trap -= 1;
+    tags.push(`капкан -${trapDamage} HP`);
+  }
+
+  if (action === 'guard') {
+    const shield = Math.round(12 + attacker.level * 5 + attacker.hp * 0.08);
+    if (attacker.role === 'Страж' || attacker.role === 'Бастион' || attacker.role === 'Звезда' || attacker.role === 'Алхимик' || attacker.role === 'Тактик') {
+      alive(allies).forEach((ally) => { ally.shield += Math.round(shield * 0.72); });
+      tags.push('щит стае');
+    } else {
+      attacker.shield += shield;
+      attacker.evade += attacker.role === 'Ассасин' || attacker.role === 'Рывок' || attacker.role === 'Тень' ? 1 : 0;
+      tags.push('личная защита');
+    }
+    if (attacker.role === 'Самурай' || attacker.role === 'Штурм' || attacker.role === 'Ассасин') attacker.focus += 1;
+    if (attacker.role === 'Звезда' || attacker.role === 'Пиромант') {
+      const ally = lowestAlly(allies);
+      if (ally) ally.currentHp = Math.min(ally.maxHp, ally.currentHp + 10 + attacker.level * 3);
+      tags.push('поддержка');
+    }
+    return `${attacker.emoji} ${attacker.name} выбирает защиту: ${tags.join(', ')}. Щит ${attacker.shield}.`;
+  }
+
+  if (action === 'tail') {
+    let entry = attack(attacker, defenders, allies, battle.round, target, 0.72);
+    target.marked = Math.max(target.marked, 2);
+    if (attacker.role === 'Скаут' || attacker.role === 'Тактик' || attacker.role === 'Рывок') target.slowed = Math.max(target.slowed, 2);
+    if (attacker.role === 'Капкан') target.trap = Math.max(target.trap, 2);
+    if (attacker.role === 'Трикстер') {
+      attacker.focus += Math.min(1, target.focus);
+      target.focus = Math.max(0, target.focus - 1);
+    }
+    if (attacker.role === 'Пиромант') target.burn = Math.max(target.burn, 2);
+    if (attacker.role === 'Тень') target.silenced = Math.max(target.silenced, 2);
+    if (attacker.role === 'Бастион' || attacker.role === 'Страж') target.taunt = Math.max(target.taunt, 1);
+    if (attacker.role === 'Ассасин') attacker.evade += 1;
+    return `${entry} 🌀 Хвостовой эффект: ${target.name} получает контроль.`;
+  }
+
+  if (action === 'super') {
+    if (attacker.silenced > 0) return `${attacker.name} пытается применить супер, но теневая блокировка гасит способность.`;
+    const bonus = battle.round % 2 === 0 && battle.superSurge ? 1.15 : 1;
+    if (attacker.role === 'Звезда' || attacker.role === 'Алхимик') {
+      const heal = Math.round((24 + attacker.level * 6) * bonus);
+      alive(allies).forEach((ally) => { ally.currentHp = Math.min(ally.maxHp, ally.currentHp + heal); ally.focus += 1; });
+      return `✨ Супер ${attacker.name}: вся стая лечится на ${heal} HP и получает фокус.`;
+    }
+    if (attacker.role === 'Страж' || attacker.role === 'Бастион') {
+      const shield = Math.round((22 + attacker.level * 6) * bonus);
+      alive(allies).forEach((ally) => { ally.shield += shield; });
+      target.taunt = Math.max(target.taunt, 2);
+      return `🛡️ Супер ${attacker.name}: щит стае ${shield}, ${target.name} вынужден отвечать.`;
+    }
+    if (attacker.role === 'Самурай' || attacker.role === 'Тактик') {
+      alive(allies).forEach((ally) => { ally.focus += 1; ally.speedBoost += 1; });
+      return `🧠 Супер ${attacker.name}: вся стая получает фокус и темп.`;
+    }
+    if (attacker.role === 'Рывок' || attacker.role === 'Титан') {
+      alive(defenders).forEach((enemy) => { enemy.slowed = Math.max(enemy.slowed, 2); enemy.vulnerable = Math.max(enemy.vulnerable, 1); });
+      return `${attack(attacker, defenders, allies, battle.round, target, 1.25 * bonus)} ❄️ Супер-контроль задевает всю стаю.`;
+    }
+    if (attacker.role === 'Пиромант' || attacker.role === 'Капкан') {
+      alive(defenders).forEach((enemy) => { enemy.burn = Math.max(enemy.burn, 2); enemy.trap = Math.max(enemy.trap, 1); });
+      return `${attack(attacker, defenders, allies, battle.round, target, 1.35 * bonus)} 🔥 Арена становится опасной для каждого врага.`;
+    }
+    if (attacker.role === 'Тень' || attacker.role === 'Трикстер') {
+      target.stunned = Math.max(target.stunned, 1);
+      target.silenced = Math.max(target.silenced, 2);
+      target.marked = Math.max(target.marked, 3);
+      return `${attack(attacker, defenders, allies, battle.round, target, 1.45 * bonus)} 🌑 Цель теряет супер и следующий темп.`;
+    }
+    const beforeAlive = target.alive;
+    const entry = attack(attacker, defenders, allies, battle.round, target, 1.65 * bonus);
+    if (beforeAlive && !target.alive && (attacker.role === 'Ассасин' || attacker.role === 'Штурм')) {
+      const next = pickTarget(attacker, defenders);
+      if (next) return `${entry} ⚡ Нокаут даёт повтор: ${attack(attacker, defenders, allies, battle.round, next, 0.9)}.`;
+    }
+    return `💥 Супер ${attacker.name}: ${entry}`;
+  }
+
+  const power = attacker.role === 'Боец' && attacker.currentHp < attacker.maxHp * 0.45 ? 1.18 : 1;
+  const entry = attack(attacker, defenders, allies, battle.round, target, power);
+  attacker.focus += 1;
+  return `${entry}${tags.length ? ` (${tags.join(', ')})` : ''}`;
+}
+
 function manualSpecial(attacker, defenders, allies, battle) {
-  const target = pickTarget(attacker, defenders);
-  const report = [];
-  if (!target) return `${attacker.name} не находит цель для суперспособности.`;
-  if (attacker.role === 'Страж') {
-    const shield = 18 + attacker.level * 4;
-    allies.filter((fighter) => fighter.alive).forEach((fighter) => { fighter.shield += shield; });
-    return `🛡️ Супер ${attacker.name}: вся стая получает щит ${shield}.`;
-  }
-  if (attacker.role === 'Скаут') {
-    target.marked = 3;
-    target.slowed = 2;
-    target.stunned = 1;
-    return `🎯 Супер ${attacker.name}: ${target.name} получает метку, замедление и блок следующего действия.`;
-  }
-  if (attacker.role === 'Рывок') {
-    defenders.filter((fighter) => fighter.alive).forEach((fighter) => { fighter.slowed = 2; });
-    return `❄️ Супер ${attacker.name}: вся вражеская стая замедлена.`;
-  }
-  if (attacker.role === 'Самурай') {
-    allies.filter((fighter) => fighter.alive).forEach((fighter) => { fighter.focus += 1; });
-    report.push(`🦊 Супер ${attacker.name}: союзники получают фокус.`);
-    report.push(attack(attacker, defenders, allies, battle.round));
-    return report.join(' ');
-  }
-  if (attacker.role === 'Звезда') {
-    const heal = 24 + attacker.level * 5;
-    allies.filter((fighter) => fighter.alive).forEach((fighter) => {
-      fighter.currentHp = Math.min(fighter.maxHp, fighter.currentHp + heal);
-    });
-    return `✨ Супер ${attacker.name}: вся стая лечится на ${heal} HP.`;
-  }
-  const oldPower = attacker.power;
-  attacker.power = Math.round(attacker.power * (attacker.role === 'Титан' ? 1.55 : 1.85));
-  const actionReport = attack(attacker, defenders, allies, battle.round);
-  attacker.power = oldPower;
-  return `💥 Супер ${attacker.name}: ${actionReport}`;
+  return performManualMove(attacker, defenders, allies, battle, 'super');
 }
 
 function applyPlayerAction(state, dogId, action) {
@@ -460,7 +578,9 @@ function applyPlayerAction(state, dogId, action) {
     addLog(state, `${attacker.name} уже ходил в этом раунде.`);
     return false;
   }
-  if (action === 'super' && battle.usedSupers.includes(dogId)) {
+  if (!['paw', 'tail', 'guard', 'super', 'basic'].includes(action)) return false;
+  const normalizedAction = action === 'basic' ? 'paw' : action;
+  if (normalizedAction === 'super' && battle.usedSupers.includes(dogId)) {
     addLog(state, `${attacker.name} уже использовал суперспособность в этом бою.`);
     return false;
   }
@@ -479,14 +599,13 @@ function applyPlayerAction(state, dogId, action) {
     state.battleReport = battle.report;
     return true;
   }
-  const entry = action === 'super'
-    ? manualSpecial(attacker, battle.enemyTeam, battle.playerTeam, battle)
-    : attack(attacker, battle.enemyTeam, battle.playerTeam, battle.round);
-  if (action === 'super') battle.usedSupers.push(dogId);
+  const requestedTarget = fighterById(battle.enemyTeam, battle.selectedTargetId);
+  const entry = performManualMove(attacker, battle.enemyTeam, battle.playerTeam, battle, normalizedAction, requestedTarget);
+  if (normalizedAction === 'super') battle.usedSupers.push(dogId);
   battle.actedIds.push(dogId);
   battle.selectedFighterId = null;
   battle.report.push(entry);
-  tickStatuses([...battle.playerTeam, ...battle.enemyTeam]);
+  tickStatuses([...battle.playerTeam, ...battle.enemyTeam], arenaEffect(selectedBot(state)).shieldDrain || 0);
   if (finishManualBattleIfNeeded(state)) return true;
   const readyForBot = alive(battle.playerTeam).every((fighter) => battle.actedIds.includes(fighter.id));
   if (readyForBot) {
@@ -522,11 +641,11 @@ function runBotTurn(state) {
     const useSuper = botWantsSuper(bot, fighter, battle);
     const entry = useSuper
       ? manualSpecial(fighter, battle.playerTeam, battle.enemyTeam, battle)
-      : attack(fighter, battle.playerTeam, battle.enemyTeam, battle.round);
+      : performManualMove(fighter, battle.playerTeam, battle.enemyTeam, battle, bot.tactic === 'control' ? 'tail' : 'paw');
     if (useSuper) battle.botUsedSupers.push(fighter.id);
     battle.report.push(`🤖 ${entry}`);
   });
-  tickStatuses([...battle.playerTeam, ...battle.enemyTeam]);
+  tickStatuses([...battle.playerTeam, ...battle.enemyTeam], arenaEffect(selectedBot(state)).shieldDrain || 0);
   if (finishManualBattleIfNeeded(state)) return;
   if (battle.round >= 5) {
     finishManualBattleIfNeeded(state, true);
@@ -552,8 +671,8 @@ function finishManualBattleIfNeeded(state, forceByHp = false) {
   battle.selectedFighterId = null;
   battle.result = { won, playerHp, enemyHp };
   state.battleSummary = battle.result;
-  state.battleReport = battle.report;
   battle.report.push(`${won ? '🏆' : '💥'} Финал ручного боя: твоя стая ${playerHp} HP, бот ${enemyHp} HP.`);
+  state.battleReport = battle.report;
   applyBattleRewards(state, won, playerHp, enemyHp);
   return true;
 }
@@ -590,6 +709,15 @@ export function selectManualFighter(state, dogId) {
   const fighter = fighterById(battle.playerTeam, dogId);
   if (!fighter || !fighter.alive || battle.actedIds.includes(dogId)) return false;
   battle.selectedFighterId = dogId;
+  return true;
+}
+
+export function selectManualTarget(state, dogId) {
+  const battle = state.manualBattle;
+  if (!battle?.active || battle.turn !== 'player') return false;
+  const fighter = fighterById(battle.enemyTeam, dogId);
+  if (!fighter || !fighter.alive) return false;
+  battle.selectedTargetId = dogId;
   return true;
 }
 

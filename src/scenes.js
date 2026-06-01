@@ -21,6 +21,7 @@ export function collectionScene(state) {
         <p class="style-tag">${locked ? 'Силуэт в питомнике' : dog.style}</p>
         <p class="lore-text">${locked ? 'Открой карту, чтобы узнать характер бойца и его роль в стае.' : dog.lore}</p>
         <p class="ability-text">${locked ? 'Карта не изучена: найди её в паке.' : dog.ability}</p>
+        ${locked ? '' : `<div class="move-preview"><span>🐾 ${dog.moves.paw}</span><span>🌀 ${dog.moves.tail}</span><span>🛡 ${dog.moves.guard}</span><span>✨ ${dog.moves.super}</span></div>`}
         ${statLine('zap', 'Атака', dog.power)}
         ${statLine('heart', 'Здоровье', dog.hp)}
         ${statLine('shield', 'Скорость', dog.speed)}
@@ -55,6 +56,7 @@ export function shopScene(state) {
       <div class="odds-card">
         <h3>Шансы редкости</h3>
         ${rarityOrder.map((rarity) => `<span>${rarity}: ${rarityMeta[rarity].packChance}%</span>`).join('')}
+        <small>Pity: ${state.packPity || 0}. Чем дольше нет эпика/легенды, тем выше их вес.</small>
       </div>
     </div>
   </section>`;
@@ -113,6 +115,13 @@ function statusBadges(fighter) {
   if (fighter.slowed > 0) statuses.push('❄ замедлен');
   if (fighter.marked > 0) statuses.push('📍 метка');
   if (fighter.stunned > 0) statuses.push('⛔ блок');
+  if (fighter.burn > 0) statuses.push('🔥 ожог');
+  if (fighter.trap > 0) statuses.push('🪤 капкан');
+  if (fighter.taunt > 0) statuses.push('📣 провокация');
+  if (fighter.evade > 0) statuses.push('💨 уклонение');
+  if (fighter.silenced > 0) statuses.push('🌑 супер-блок');
+  if (fighter.vulnerable > 0) statuses.push('💢 уязвимость');
+  if (fighter.speedBoost > 0) statuses.push('🌀 темп');
   return statuses.length ? `<small>${statuses.join(' · ')}</small>` : '<small>готов к обмену ударами</small>';
 }
 
@@ -122,7 +131,13 @@ function battleSetupMarkup(state, selectedIds, bot) {
     <div class="team-picker">
       ${ownedDogs(state).map((dog) => `<button class="team-chip ${selectedIds.includes(dog.id) ? 'active' : ''}" data-team-dog="${dog.id}">${dog.emoji} ${dog.name}</button>`).join('')}
     </div>
-    <small>Нажми на собаку, чтобы поставить её в тройку. Новая собака заменит самую старую выбранную.</small>
+    <small>Сначала выбери тройку. В бою способности раскроются только у выбранной собаки — как в пошаговой RPG.</small>
+    <div class="selected-kit">
+      ${selectedIds.map((id) => {
+        const dog = ownedDogs(state).find((item) => item.id === id);
+        return dog ? `<article><strong>${dog.emoji} ${dog.name}</strong><span>${dog.role} · ${dog.element}</span><small>${dog.moves.super}</small></article>` : '';
+      }).join('')}
+    </div>
     <div class="enemy-team">
       ${bot.dogs.map((id) => {
         const dog = baseDogs.find((item) => item.id === id);
@@ -154,30 +169,41 @@ function fighterCard(fighter, battle, selected) {
   </button>`;
 }
 
-function enemyToken(fighter) {
-  return `<div class="enemy-token ${fighter.alive ? '' : 'down'}">
+function enemyToken(fighter, selected) {
+  return `<button class="enemy-token ${selected ? 'selected' : ''} ${fighter.alive ? '' : 'down'}" data-select-target="${fighter.id}" ${fighter.alive ? '' : 'disabled'}>
     <span>${fighter.emoji}</span>
     <strong>${fighter.name}</strong>
     ${hpBar(fighter)}
     ${statusBadges(fighter)}
-  </div>`;
+  </button>`;
 }
 
 function actionDock(battle) {
   const selected = battle.playerTeam.find((fighter) => fighter.id === battle.selectedFighterId)
     || battle.playerTeam.find((fighter) => fighter.alive && !battle.actedIds.includes(fighter.id));
+  const target = battle.enemyTeam.find((fighter) => fighter.id === battle.selectedTargetId && fighter.alive)
+    || battle.enemyTeam.find((fighter) => fighter.alive);
   const acted = selected ? battle.actedIds.includes(selected.id) : true;
   const dead = selected ? !selected.alive : true;
-  const basicDisabled = !selected || dead || acted || battle.turn !== 'player';
+  const disabled = !selected || dead || acted || battle.turn !== 'player';
   const superUsed = selected ? battle.usedSupers.includes(selected.id) : true;
+  const moves = selected?.moves || {};
   return `<div class="action-dock">
     <div>
-      <strong>${selected ? `${selected.emoji} ${selected.name}` : 'Выбери карту'}</strong>
+      <strong>${selected ? `${selected.emoji} ${selected.name}` : 'Выбери карту'} ${target ? `→ ${target.emoji} ${target.name}` : ''}</strong>
       <p>${actionHint(battle, selected)}</p>
+      ${selected ? `<div class="kit-reveal">
+        <span>🐾 ${moves.paw}</span>
+        <span>🌀 ${moves.tail}</span>
+        <span>🛡 ${moves.guard}</span>
+        <span>✨ ${moves.super}</span>
+      </div>` : ''}
     </div>
     <div class="action-buttons">
-      <button data-manual-action="basic" data-fighter="${selected?.id || ''}" ${basicDisabled ? 'disabled' : ''}>Обычная атака</button>
-      <button data-manual-action="super" data-fighter="${selected?.id || ''}" ${basicDisabled || superUsed ? 'disabled' : ''}>Супер</button>
+      <button data-manual-action="paw" data-fighter="${selected?.id || ''}" ${disabled ? 'disabled' : ''}>🐾 Лапа</button>
+      <button data-manual-action="tail" data-fighter="${selected?.id || ''}" ${disabled ? 'disabled' : ''}>🌀 Хвост</button>
+      <button data-manual-action="guard" data-fighter="${selected?.id || ''}" ${disabled ? 'disabled' : ''}>🛡 Щит</button>
+      <button data-manual-action="super" data-fighter="${selected?.id || ''}" ${disabled || superUsed ? 'disabled' : ''}>✨ Супер</button>
     </div>
   </div>`;
 }
@@ -192,7 +218,7 @@ function activeArenaMarkup(state) {
       <span>${battle.playerTeam.filter((fighter) => fighter.alive).length}v${battle.enemyTeam.filter((fighter) => fighter.alive).length}</span>
     </div>
     <div class="enemy-line">
-      ${battle.enemyTeam.map(enemyToken).join('')}
+      ${battle.enemyTeam.map((fighter) => enemyToken(fighter, fighter.id === battle.selectedTargetId)).join('')}
     </div>
     <div class="arena-lane">
       <div class="lane-glow"></div>

@@ -6,13 +6,13 @@ export function renderApp(state) {
   return `<main class="app-shell">
     <section class="hero-card">
       <div>
-        <p class="eyebrow">${icon('sparkles')} Paw Arena</p>
-        <h1>Собери стаю и зажги неоновую арену лап</h1>
-        <p class="hero-text">У каждой собаки появился характер, боевой стиль и арена с модификаторами: HP, инициатива, щиты, метки, криты, лечение и роли теперь читаются прямо в интерфейсе.</p>
+        <p class="eyebrow">${icon('sparkles')} Paw Arena 2.0</p>
+        <h1>Paw Arena 2.0: выбери собаку, цель и ход</h1>
+        <p class="hero-text">Бой стал ручным и менее очевидным: выбирай собаку, цель, лапу, хвост, щит или супер. Способности раскрываются после выбора бойца, а редкие собаки падают через честную pity-логику.</p>
         <div class="hero-badges">
-          <span>✨ анимированные карты</span>
-          <span>🏟️ арены с эффектами</span>
-          <span>❤️ живые HP-бары</span>
+          <span>🐾 4 действия у каждой собаки</span>
+          <span>🎯 ручной выбор цели</span>
+          <span>🎁 pity-дропы</span>
         </div>
       </div>
       <div class="stats-panel">
