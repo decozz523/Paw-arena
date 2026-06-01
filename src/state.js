@@ -7,14 +7,15 @@ export function createCollection() {
 export function createDefaultState() {
   return {
     scene: 'collection',
-    points: 220,
+    points: 260,
     collection: createCollection(),
     selectedBotIndex: 0,
     playerTeamIds: [1, 2, 3],
     manualBattle: null,
-    log: ['Добро пожаловать в Paw Arena! Теперь у стаи есть способности, миссии, серии побед и автосохранение.'],
+    log: ['Добро пожаловать в Paw Arena 2.0! Ручные ходы, цели, суперспособности и pity-дропы уже активны.'],
     lastPack: [],
-    battleReport: ['Выбери соперника и начни бой, чтобы увидеть пошаговую схватку с HP, критами и способностями.'],
+    packPity: 0,
+    battleReport: ['Выбери соперника, собери тройку, затем выбирай собаку и цель: способности раскроются уже в бою.'],
     battleSummary: null,
     stats: { wins: 0, losses: 0, streak: 0, bestStreak: 0, packsOpened: 0, upgrades: 0, defeatedBots: [] },
     claimedQuests: [],
